@@ -7,7 +7,7 @@ const app= express();
 app.use(cors());
 app.use(express.json());
 
-const Port = process.env.PORT || '(PUT YOUR PORT HERE)';
+const Port = process.env.PORT || '(PUT THE PORT)';
 
 app.get('/', (req, res) => {
     res.send('Hello from server!');
