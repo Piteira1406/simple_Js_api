@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const db = require('./db.js');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app= express();
@@ -13,22 +14,22 @@ app.get('/', (req, res) => {
     res.send('Hello from server!');
 });
 
-app.get('/api/users/:id', (req, res) => {
+app.get('/login', (req, res) => {
     const { id } = req.params;
     const sql = `SELECT * FROM users WHERE id = ?`;
     
-    db.get(sql, [id], (err, row) => {
+    db.get(sql, [id], (err, user) => {
         if (err) {
-            return res.status(500).json({ message: 'Erro ao buscar o usuário', error: err.message });
+            return res.status(500).json({ message: 'Error when searching for user', error: err.message });
         }
-        if (!row) {
-            return res.status(404).json({ message: 'Usuário não encontrado' });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
         }
-        res.status(200).json(row);
+        res.status(200).json(user);
     });
 });
 
-app.post('/api/post', (req, res) => {
+app.post('/register', (req, res) => {
     const { name, email, password } = req.body;
     const sql = 'INSERT INTO users (name, email, password) VALUES (?, ?, ?)';
     db.run(sql, [name, email, password], function(err) {
@@ -42,7 +43,7 @@ app.post('/api/post', (req, res) => {
     });
 });
 
-app.put('/api/update/:id', (req, res) => {
+app.put('/profile', (req, res) => {
     const { id } = req.params;
     const { name, email, password } = req.body;
     const sql = 'UPDATE users SET name = ?, email = ?, password = ? WHERE id = ?';
@@ -53,7 +54,6 @@ app.put('/api/update/:id', (req, res) => {
         if (this.changes === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
-        // If the user was updated successfully, return the updated user data
         res.status(200).json({
             message: 'User updated successfully',
             userId: id, name, email, password
@@ -71,7 +71,6 @@ app.delete('/api/delete/:id', (req, res) => {
         if (this.changes === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
-        // If the user was deleted successfully, return a success message
         res.status(200).json({
             message: 'User deleted successfully',
             userId: id
@@ -80,10 +79,52 @@ app.delete('/api/delete/:id', (req, res) => {
 });
 
 
+//JWT Authentication
+const SECRET_KEY = process.env.SECRET_KEY || 'your_secret_key';
+
+//Login Endpoint
+
+app.post('/login', (req, res) => {
+    const { email, password } = req.body;
+    const sql = 'SELECT * FROM users WHERE email = ?';
+    db.get(sql, [email], (err, user) => {
+        if (err) {
+            return res.status(500).json({ message: 'The Email is not registered', error: err.message });
+        }
+        if (!user || user.password !== password) {
+            
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+        const token = jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '1h' });
+        res.status(200).json({ token });
+    });
+});
+
+//Middleware to protect routes
+const authenticateJWT = (req, res, next) => {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) {
+        return res.sendStatus(403);
+    }
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) {
+            return res.sendStatus(403);
+        }
+        req.user = user;
+        next();
+    });
+};
 
 
+app.post('/logout', (req, res) => {
+    res.status(200).json({ message: 'Logout successful. Remove the token on the client side.' });
+  });
 
-
+app.get('/protected', authenticateJWT, (req, res) => {
+    res.status(200).json({ message: 'This is a protected route', user: req.user });
+});
 app.listen(Port, () => {
     console.log(`Server is running on port ${Port}`);
 });
+
+
